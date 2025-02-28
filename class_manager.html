@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>学生机房上课情况记录与管理系统</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.5/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #2196f3;
+            --danger-color: #f44336;
+            --success-color: #4caf50;
+            --background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        }
+
+        body {
+            background: var(--background);
+            font-family: '微软雅黑';
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .main-container {
+            width: 100%;
+            max-width: 1200px;
+            background: rgba(255,255,255,0.95);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .control-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .time-display {
+            text-align: right;
+            color: #666;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+        }
+
+        .student-grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 5px;
+            margin: 20px 0;
+        }
+
+        .student-item {
+            padding: 8px;
+            border: 1px solid #ddd;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #fff;
+            position: relative;
+        }
+
+        .student-name {
+            font-size: 12px;
+            color: #666;
+            margin-top: 3px;
+        }
+
+        .student-item.selected {
+            background: #b3e5fc;
+            border-color: var(--primary-color);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+        }
+
+        .modal-content {
+            background: white;
+            width: 800px;
+            max-height: 80vh;
+            padding: 20px;
+            border-radius: 10px;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            overflow-y: auto;
+        }
+
+        .operation-buttons {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .btn {
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .btn.primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn.danger {
+            background: var(--danger-color);
+            color: white;
+        }
+
+        .btn.success {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .record-grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 5px;
+            margin: 15px 0;
+        }
+
+        .ranking-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            margin: 5px 0;
+            background: #f8f9ff;
+            border-radius: 5px;
+        }
+
+        #importFile {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            left: 0;
+            top: 0;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="header">
+            <h1>学生机房上课情况记录与管理系统</h1>
+            <div class="time-display" id="currentTime"></div>
+            
+            <div class="control-group">
+                <div>
+                    <input type="text" id="semester" placeholder="输入学期名称">
+                    <button class="btn primary" onclick="saveSemester()">设置学期</button>
+                    <button class="btn danger" onclick="clearData()">清除数据</button>
+                </div>
+                <select id="classSelector" onchange="loadClass()">
+                    <option value="">请选择班级</option>
+                </select>
+                <div>
+                    <input type="text" id="searchInput" placeholder="输入班级学号（如7101）">
+                    <button class="btn primary" onclick="searchStudent()">查询</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="operation-buttons">
+            <div>
+                <h3>【扣分项目】</h3>
+                <button class="btn danger" onclick="handleOperation(-1, '未带鞋套')">- 未带鞋套</button>
+                <button class="btn danger" onclick="handleOperation(-1, '上课表现差')">- 上课表现差</button>
+                <button class="btn danger" onclick="handleOperation(-1, '设备未归位')">- 设备未归位</button>
+                <button class="btn danger" onclick="handleOperation(-1, '座位附近有垃圾')">- 座位附近有垃圾</button>
+                <button class="btn danger" onclick="handleOperation(-1, '损坏设备')">- 损坏设备</button>
+            </div>
+            <div>
+                <h3>【加分项目】</h3>
+                <button class="btn success" onclick="handleOperation(1, '积极回答问题')">+ 积极回答问题</button>
+                <button class="btn success" onclick="handleOperation(1, '帮助同学')">+ 帮助同学</button>
+                <button class="btn success" onclick="handleOperation(1, '协助打扫卫生')">+ 协助打扫卫生</button>
+            </div>
+        </div>
+
+        <div class="student-grid" id="studentContainer"></div>
+
+        <div class="control-group">
+            <button class="btn primary" onclick="showClassManager()">班级管理</button>
+            <button class="btn primary" onclick="showRecords()">详细记录</button>
+            <button class="btn primary" onclick="showClassRanking()">积分排名</button>
+            <button class="btn primary">
+                导入数据
+                <input type="file" id="importFile" accept=".json" onchange="importData()">
+            </button>
+            <button class="btn primary" onclick="exportData()">导出数据</button>
+        </div>
+    </div>
+
+    <!-- 班级管理模态框 -->
+    <div id="classModal" class="modal">
+        <div class="modal-content">
+            <h3>班级生成器</h3>
+            <div>
+                <label><input type="checkbox" class="grade" value="7"> 七年级</label>
+                <label><input type="checkbox" class="grade" value="8"> 八年级</label>
+                <label><input type="checkbox" class="grade" value="9"> 九年级</label>
+            </div>
+            <input type="number" id="classCount" placeholder="每个年级的班级数量" min="1">
+            <button class="btn primary" onclick="generateClasses()">生成班级</button>
+            <button class="btn primary" style="position:relative">
+                导入学生名单
+                <input type="file" id="excelFile" 
+                       accept=".xlsx,.xls" 
+                       style="opacity:0;position:absolute;left:0;top:0;width:100%;height:100%;cursor:pointer"
+                       onchange="handleExcelImport(this.files[0])">
+            </button>
+            <button class="btn" onclick="closeModal()">关闭</button>
+        </div>
+    </div>
+
+    <!-- 详细信息模态框 -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content">
+            <h3 id="detailTitle"></h3>
+            <div id="detailContent"></div>
+            <button class="btn" onclick="closeModal()">关闭</button>
+        </div>
+    </div>
+
+    <!-- 积分排名模态框 -->
+    <div id="rankingModal" class="modal">
+        <div class="modal-content">
+            <h3 id="rankingTitle"></h3>
+            <div id="rankingList"></div>
+            <button class="btn" onclick="closeModal()">关闭</button>
+        </div>
+    </div>
+
+    <script>
+        // 数据存储结构
+        let currentClass = '';
+        let currentSemester = localStorage.getItem('currentSemester') || '';
+        let selectedStudents = [];
+        let records = JSON.parse(localStorage.getItem(`records_${currentSemester}`)) || [];
+        //let classConfig = JSON.parse(localStorage.getItem('classConfig')) || {};
+        let classConfig = JSON.parse(localStorage.getItem('classConfig')) || {
+        // 示例结构：
+        // "7年级1班": {
+        //   count: 50,
+        //   students: {
+        //     "7101": "吴文秀",
+        //     "7102": "黄咏琪",
+        //     ...
+        //   }
+        // }
+        };
+
+        // 系统初始化
+        function init() {
+            document.getElementById('semester').value = currentSemester;
+            updateTime();
+            setInterval(updateTime, 1000);
+            loadClassSelector();
+        }
+
+        // 时间格式化函数
+        function formatDateTime(dateStr) {
+            const date = new Date(dateStr);
+            const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+            return date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            }).replace(/\//g, '-') + ` 星期${weekdays[date.getDay()]}`;
+        }
+
+        // 更新时间显示
+        function updateTime() {
+            document.getElementById('currentTime').textContent = formatDateTime(new Date());
+        }
+
+        // 班级管理功能
+        function showClassManager() {
+            document.getElementById('classModal').style.display = 'block';
+        }
+
+        function generateClasses() {
+            const grades = Array.from(document.querySelectorAll('.grade:checked'))
+                             .map(input => input.value);
+            const count = parseInt(document.getElementById('classCount').value);
+
+            if (!grades.length || !count) {
+                alert('请选择年级并输入班级数量！');
+                return;
+            }
+            /**
+            grades.forEach(grade => {
+                for (let i = 1; i <= count; i++) {
+                    const className = `${grade}年级${i}班`;
+                    classConfig[className] = 50; // 默认每个班级50人
+                }
+            });
+            **/
+            grades.forEach(grade => {
+                for (let i = 1; i <= count; i++) {
+                    const className = `${grade}年级${i}班`;
+                    classConfig[className] = {
+                        count: 50,
+                        students: {}
+                    };
+                }
+            });
+
+            localStorage.setItem('classConfig', JSON.stringify(classConfig));
+            loadClassSelector();
+            closeModal();
+            alert('班级生成成功！');
+        }
+
+        //班级导入函数
+        function handleExcelImport(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(sheet, {header:1});
+
+                jsonData.forEach(row => {
+                    const classCode = row[0].toString().substring(0,2);
+                    const className = `${classCode[0]}年级${classCode[1]}班`;
+                    
+                    if(classConfig[className]) {
+                        classConfig[className].students[row[0]] = row[1];
+                    }
+                });
+
+                localStorage.setItem('classConfig', JSON.stringify(classConfig));
+                loadClass(); // 刷新当前班级显示
+                alert('学生名单导入成功！');
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function closeModal() {
+            document.getElementById('classModal').style.display = 'none';
+        }
+
+        // 加载班级选择器
+        function loadClassSelector() {
+            const selector = document.getElementById('classSelector');
+            selector.innerHTML = '<option value="">请选择班级</option>';
+            Object.keys(classConfig).forEach(className => {
+                const option = document.createElement('option');
+                option.value = className;
+                option.textContent = className;
+                selector.appendChild(option);
+            });
+        }
+
+        // 加载学生列表
+        /**
+        function loadClass() {
+            currentClass = document.getElementById('classSelector').value;
+            const container = document.getElementById('studentContainer');
+            container.innerHTML = '';
+            
+            if (!currentClass) return;
+
+            for (let i = 1; i <= classConfig[currentClass]; i++) {
+                const student = document.createElement('div');
+                student.className = 'student-item';
+                student.textContent = `NO.${i.toString().padStart(2, '0')}`;
+                student.onclick = () => toggleSelect(student, i);
+                container.appendChild(student);
+            }
+        }
+        **/
+        function loadClass() {
+            currentClass = document.getElementById('classSelector').value;
+            const container = document.getElementById('studentContainer');
+            container.innerHTML = '';
+            
+            if (!currentClass) return;
+
+            // 获取班级配置中的学生数量（注意新版数据结构需要 classConfig[currentClass].count）
+            const studentCount = classConfig[currentClass].count || classConfig[currentClass]; 
+
+            for (let i = 1; i <= studentCount; i++) {
+                const student = document.createElement('div');
+                student.className = 'student-item';
+                
+                // ▼▼▼ 修改这里：用innerHTML代替textContent ▼▼▼
+                student.innerHTML = `
+                    <div>NO.${i.toString().padStart(2, '0')}</div>
+                    <div class="student-name">
+                        ${classConfig[currentClass].students[ 
+                            // 生成完整四位数学生编号（例如"3年级1班"的第5个学生→3105）
+                            currentClass.match(/\d/g).join('') + i.toString().padStart(2, '0')
+                        ] || ''}
+                    </div>
+                `;
+                // ▲▲▲ 修改结束 ▲▲▲
+
+                student.onclick = () => toggleSelect(student, i);
+                container.appendChild(student);
+            }
+        }
+
+        // 学生选择功能
+        function toggleSelect(element, studentId) {
+            element.classList.toggle('selected');
+            const index = selectedStudents.indexOf(studentId);
+            index === -1 ? selectedStudents.push(studentId) : selectedStudents.splice(index, 1);
+        }
+
+        // 处理加减分操作
+        function handleOperation(score, reason) {
+            if (!currentClass) {
+                alert('请先选择班级！');
+                return;
+            }
+            if (selectedStudents.length === 0) {
+                alert('请选择至少一个学生！');
+                return;
+            }
+
+            const record = {
+                semester: currentSemester,
+                class: currentClass,
+                students: [...selectedStudents],
+                reason,
+                score,
+                date: new Date().toISOString()
+            };
+
+            records.push(record);
+            saveData();
+            selectedStudents = [];
+            document.querySelectorAll('.selected').forEach(item => item.classList.remove('selected'));
+            alert('操作已保存！');
+        }
+
+        // 显示详细记录
+        /**
+        function showRecords() {
+            //debugger
+            if (!currentClass) {
+                alert('请先选择班级！');
+                return;
+            }
+
+            const modal = document.getElementById('detailModal');
+            const content = document.getElementById('detailContent');
+            content.innerHTML = `
+            <h3>${className} ${studentId.toString().padStart(2, '0')}号</h3>
+            <p>姓名：${classConfig[className].students[studentId] || '未知'}</p>
+            <h3>${currentClass} 学生列表</h3><div class="record-grid"></div>
+            `;
+            
+            const grid = content.querySelector('.record-grid');
+            for(let i=1; i<=classConfig[currentClass]; i++) {
+                const student = document.createElement('div');
+                student.className = 'student-item';
+                student.textContent = `NO.${i.toString().padStart(2, '0')}`;
+                student.onclick = () => showStudentDetail(currentClass, i);
+                grid.appendChild(student);
+            }
+            
+            modal.style.display = 'block';
+        }
+        **/
+
+        function showRecords() {
+            if (!currentClass) {
+                alert('请先选择班级！');
+                return;
+            }
+
+            const modal = document.getElementById('detailModal');
+            const content = document.getElementById('detailContent');
+            content.innerHTML = `<h3>${currentClass} 学生列表</h3><div class="record-grid"></div>`;
+            
+            const grid = content.querySelector('.record-grid');
+            const studentCount = classConfig[currentClass].count; // 获取实际学生数量
+            
+            for(let i=1; i<=studentCount; i++) {
+                const student = document.createElement('div');
+                student.className = 'student-item';
+                student.innerHTML = `
+                    <div>NO.${i.toString().padStart(2, '0')}</div>
+                    <div class="student-name">
+                        ${classConfig[currentClass].students[ 
+                            currentClass.match(/\d/g).join('') + i.toString().padStart(2, '0')
+                        ] || ''}
+                    </div>
+                `;
+                student.onclick = () => showStudentDetail(currentClass, i);
+                grid.appendChild(student);
+            }
+            
+            modal.style.display = 'block';
+        }
+
+        // 显示学生详情
+        /**
+        function showStudentDetail(className, studentId) {
+            const studentRecords = records.filter(r => 
+                r.class === className && r.students.includes(studentId)
+            ).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            const totalScore = 100 + studentRecords.reduce((sum, r) => sum + r.score, 0);
+
+            const modal = document.getElementById('detailModal');
+            const content = document.getElementById('detailContent');
+            content.innerHTML = `
+                <h3>${className} 学号${studentId.toString().padStart(2, '0')}</h3>
+                <p>当前总分：<strong>${totalScore}分</strong></p>
+                <h4>详细记录：</h4>
+                ${studentRecords.map(r => `
+                    <div class="record-item">
+                        [${formatDateTime(r.date)}] ${r.score > 0 ? '+' : ''}${r.score} ${r.reason}
+                    </div>
+                `).join('') || '<p>暂无记录</p>'}
+            `;
+            modal.style.display = 'block';
+        }
+        **/
+        function showStudentDetail(className, studentId) {
+            const fullStudentId = className.match(/\d/g).join('') + studentId.toString().padStart(2, '0');
+            
+            const studentRecords = records.filter(r => 
+                r.class === className && r.students.includes(studentId)
+            ).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            const totalScore = 100 + studentRecords.reduce((sum, r) => sum + r.score, 0);
+
+            const modal = document.getElementById('detailModal');
+            const content = document.getElementById('detailContent');
+            content.innerHTML = `
+                <h3>${className} ${studentId.toString().padStart(2, '0')}号</h3>
+                <p>姓名：${classConfig[className].students[fullStudentId] || '未知'}</p>
+                <p>当前总分：<strong>${totalScore}分</strong></p>
+                <h4>详细记录：</h4>
+                ${studentRecords.map(r => `
+                    <div class="record-item">
+                        [${formatDateTime(r.date)}] ${r.score > 0 ? '+' : ''}${r.score} ${r.reason}
+                    </div>
+                `).join('') || '<p>暂无记录</p>'}
+            `;
+            modal.style.display = 'block';
+        }
+
+        // 显示班级排名
+        /**
+        function showClassRanking() {
+            if (!currentClass) {
+                alert('请先选择班级！');
+                return;
+            }
+
+            const classSize = classConfig[currentClass];
+            const scores = {};
+
+            // 初始化所有学生分数为100
+            for(let i=1; i<=classSize; i++) {
+                scores[i] = 100;
+            }
+
+            // 计算实际分数
+            records.filter(r => r.class === currentClass).forEach(record => {
+                record.students.forEach(student => {
+                    scores[student] += record.score;
+                });
+            });
+
+            // 转换并排序
+            const ranking = Object.entries(scores)
+                .sort((a, b) => b[1] - a[1])
+                .map(([student, score], index) => ({
+                    rank: index + 1,
+                    student: student.padStart(2, '0'),
+                    score
+                }));
+
+            // 显示排名
+            const modal = document.getElementById('rankingModal');
+            const content = document.getElementById('rankingList');
+            content.innerHTML = `
+                <div class="ranking-item" style="font-weight:bold">
+                    <span>排名</span>
+                    <span>学号</span>
+                    <span>总分</span>
+                </div>
+                ${ranking.map(item => `
+                    <div class="ranking-item">
+                        <span>${item.rank}</span>
+                        <span>${item.student}</span>
+                        <span>${item.score}分</span>
+                    </div>
+                `).join('')}
+            `;
+
+            document.getElementById('rankingTitle').textContent = `${currentClass} 积分排名`;
+            modal.style.display = 'block';
+        }
+        **/
+
+        function showClassRanking() {
+            if (!currentClass) {
+                alert('请先选择班级！');
+                return;
+            }
+
+            const classSize = classConfig[currentClass].count; // 修正为获取count属性
+            const scores = {};
+
+            // 初始化所有学生分数为100
+            for(let i=1; i<=classSize; i++) {
+                scores[i] = 100;
+            }
+
+            // 计算实际分数
+            records.filter(r => r.class === currentClass).forEach(record => {
+                record.students.forEach(student => {
+                    scores[student] += record.score;
+                });
+            });
+
+            // 转换并排序
+            const ranking = Object.entries(scores)
+                .sort((a, b) => b[1] - a[1])
+                .map(([student, score], index) => ({
+                    rank: index + 1,
+                    student: student.toString().padStart(2, '0'),
+                    score
+                }));
+
+            // 显示排名
+            const modal = document.getElementById('rankingModal');
+            const content = document.getElementById('rankingList');
+            /**
+            content.innerHTML = `
+                <div class="ranking-item" style="font-weight:bold">
+                    <span>排名</span>
+                    <span>学号</span>
+                    <span>总分</span>
+                </div>
+                ${ranking.map(item => `
+                    <div class="ranking-item">
+                        <span>${item.rank}</span>
+                        <span>${item.student}</span>
+                        <span>${item.score}分</span>
+                    </div>
+                `).join('')}
+            `;
+            **/
+            content.innerHTML = `
+                <div class="ranking-item" style="font-weight:bold">
+                    <span>排名</span>
+                    <span>学号/姓名</span>
+                    <span>总分</span>
+                </div>
+                ${ranking.map(item => {
+                    // 生成完整四位数学号（例如：7101）
+                    const fullStudentId = currentClass.match(/\d/g).join('') + item.student;
+                    // 从班级配置中获取姓名
+                    const studentName = classConfig[currentClass].students[fullStudentId] || '未知';
+                    
+                    return `
+                        <div class="ranking-item">
+                            <span>${item.rank}</span>
+                            <span>${fullStudentId} ${studentName}</span>
+                            <span>${item.score}分</span>
+                        </div>
+                    `;
+                }).join('')}
+            `;
+            document.getElementById('rankingTitle').textContent = `${currentClass} 积分排名`;
+            modal.style.display = 'block';
+        }
+
+        // 数据导出
+        function exportData() {
+            const data = {
+                semester: currentSemester,
+                classConfig,
+                records
+            };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `class_data_${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // 数据导入
+        function importData() {
+            const file = document.getElementById('importFile').files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    
+                    // 验证数据结构
+                    if (!data.semester || !data.classConfig || !data.records) {
+                        throw new Error('无效的数据文件');
+                    }
+
+                    // 更新数据
+                    currentSemester = data.semester;
+                    classConfig = data.classConfig;
+                    records = data.records;
+
+                    // 保存到本地存储
+                    localStorage.setItem('currentSemester', currentSemester);
+                    localStorage.setItem('classConfig', JSON.stringify(classConfig));
+                    localStorage.setItem(`records_${currentSemester}`, JSON.stringify(records));
+
+                    // 刷新界面
+                    init();
+                    alert('数据导入成功！');
+                } catch (error) {
+                    alert('文件格式错误或数据不完整');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // 保存学期
+        function saveSemester() {
+            currentSemester = document.getElementById('semester').value.trim();
+            if (!currentSemester) {
+                alert('请输入学期名称！');
+                return;
+            }
+            localStorage.setItem('currentSemester', currentSemester);
+            alert('学期设置成功！');
+        }
+
+        // 清除数据
+        function clearData() {
+            if (!confirm('确定要清除所有数据吗？此操作不可恢复！')) return;
+            localStorage.clear();
+            currentSemester = '';
+            classConfig = {};
+            records = [];
+            init();
+            alert('数据已清除');
+        }
+
+        // 查询学生
+        function searchStudent() {
+            const input = document.getElementById('searchInput').value.trim();
+            if (!/^\d{4}$/.test(input)) {
+                alert('请输入4位数字（如7101）');
+                return;
+            }
+
+            const grade = input[0];
+            const classNum = input[1];
+            const studentId = parseInt(input.substring(2));
+            const className = `${grade}年级${classNum}班`;
+
+            if (!classConfig[className] || studentId > classConfig[className]) {
+                alert('班级或学号不存在');
+                return;
+            }
+
+            showStudentDetail(className, studentId);
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            document.querySelectorAll('.modal').forEach(modal => {
+                modal.style.display = 'none';
+            });
+        }
+
+        // 保存数据到本地存储
+        function saveData() {
+            localStorage.setItem(`records_${currentSemester}`, JSON.stringify(records));
+            localStorage.setItem('classConfig', JSON.stringify(classConfig));
+        }
+
+        // 页面加载初始化
+        window.onload = init;
+    </script>
+</body>
+</html>
